@@ -222,57 +222,6 @@ def clip_index(
             raise e
     else:
         logger.warning(f"Embeddings dir {text_embeddings_dir} not exist")
-
-
-def batch_search_index(
-        queries,
-        model,
-        faiss_index,
-        df,
-        num_results,
-        threshold,
-        debug=False,
-):
-    """
-    Search index with image inputs or image paths (batch search)
-    :param queries: list of image paths or list of image inputs or texts or embeddings
-    :param model: CLIP model
-    :param faiss_index: faiss index
-    :param df: corpus dataframe
-    :param num_results: int, number of results to return
-    :param threshold: float, threshold to return results
-    :param debug: bool, whether to print debug info, default True
-    :return: search results
-    """
-    result = []
-    if isinstance(queries, np.ndarray):
-        if queries.size == 0:
-            return result
-        query_features = queries
-    else:
-        if not queries:
-            return result
-        query_features = model.encode(queries, normalize_embeddings=True, convert_to_numpy=True)
-
-    if query_features.shape[0] > 0:
-        query_features = query_features.astype(np.float32)
-        if threshold is not None:
-            _, D, I = faiss_index.range_search(query_features, threshold)
-        else:
-            D, I = faiss_index.search(query_features, num_results)
-        for query, d, i in zip(queries, D, I):
-            # Sorted faiss search result with distance
-            text_scores = []
-            for ed, ei in zip(d, i):
-                # Convert to json, avoid float values error
-                item = df.iloc[ei].to_json(force_ascii=False)
-                if debug:
-                    logger.debug(f"query: {query}, Found: {item}, similarity: {ed}, id: {ei}")
-                text_scores.append((item, float(ed), int(ei)))
-            # Sort by score desc
-            query_result = sorted(text_scores, key=lambda x: x[1], reverse=True)
-            result.append(query_result)
-    return result
     
 def batch_search_index(
         queries,
@@ -425,14 +374,14 @@ def clip_filter(
                     f.write('\n')
                 logger.info(f"Query texts size: {len(texts)}, saved result to {output_file}")
             elif images:
+                all_data = []
                 for q, sorted_text_scores in zip(images, result):
-                    json.dump(
-                        {'image': q,
-                         'results': [{'item': i, 'similarity': j, 'id': k} for i, j, k in sorted_text_scores]},
-                        f,
-                        ensure_ascii=False,
-                    )
-                    f.write('\n')
+                    all_data.append({
+                        'image': q,
+                        'results': [{'item': i, 'similarity': j, 'id': k} for i, j, k in sorted_text_scores]
+                    })
+                json.dump(all_data, f, ensure_ascii=False)
+                f.write('\n')
                 logger.info(f"Query images size: {len(images)}, saved result to {output_file}")
             elif embeddings is not None:
                 for q, sorted_text_scores in zip(queries, result):
