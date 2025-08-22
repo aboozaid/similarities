@@ -273,6 +273,87 @@ def batch_search_index(
             query_result = sorted(text_scores, key=lambda x: x[1], reverse=True)
             result.append(query_result)
     return result
+    
+def batch_search_index(
+        queries,
+        model,
+        faiss_index,
+        df,
+        num_results,
+        threshold,
+        debug=False,
+):
+    """
+    Search index with image inputs or image paths (batch search)
+    :param queries: list of image paths or list of image inputs or texts or embeddings
+    :param model: CLIP model
+    :param faiss_index: faiss index
+    :param df: corpus dataframe
+    :param num_results: int, number of results to return
+    :param threshold: float, threshold to return results
+    :param debug: bool, whether to print debug info, default True
+    :return: search results
+    """
+    result = []
+    if isinstance(queries, np.ndarray):
+        if queries.size == 0:
+            return result
+        query_features = queries
+    else:
+        if not queries:
+            return result
+        query_features = model.encode(queries, normalize_embeddings=True, convert_to_numpy=True)
+    
+    if query_features.shape[0] > 0:
+        query_features = query_features.astype(np.float32)
+        
+        if threshold is not None:
+            # range_search returns (lims, D, I) where lims indicates boundaries
+            lims, D, I = faiss_index.range_search(query_features, threshold)
+            
+            # Process each query separately using lims boundaries
+            for query_idx, query in enumerate(queries):
+                start_idx = lims[query_idx]
+                end_idx = lims[query_idx + 1]
+                
+                # Extract distances and indices for this specific query
+                query_distances = D[start_idx:end_idx]
+                query_indices = I[start_idx:end_idx]
+                
+                text_scores = []
+                for ed, ei in zip(query_distances, query_indices):
+                    # Convert to json, avoid float values error
+                    item = df.iloc[ei].to_json(force_ascii=False)
+                    if debug:
+                        logger.debug(f"query: {query}, Found: {item}, similarity: {ed}, id: {ei}")
+                    text_scores.append((item, float(ed), int(ei)))
+                
+                # Sort by score desc (for range_search, smaller distances are better)
+                query_result = sorted(text_scores, key=lambda x: x[1], reverse=True)
+                result.append(query_result)
+                
+        else:
+            # Regular search returns D, I as 2D arrays
+            D, I = faiss_index.search(query_features, num_results)
+            
+            for query, d, i in zip(queries, D, I):
+                # Sorted faiss search result with distance
+                text_scores = []
+                for ed, ei in zip(d, i):
+                    # Skip invalid indices (faiss returns -1 for missing results)
+                    if ei == -1:
+                        continue
+                    # Convert to json, avoid float values error
+                    item = df.iloc[ei].to_json(force_ascii=False)
+                    if debug:
+                        logger.debug(f"query: {query}, Found: {item}, similarity: {ed}, id: {ei}")
+                    text_scores.append((item, float(ed), int(ei)))
+                
+                # Sort by score (for regular search, smaller distances are better too)
+                query_result = sorted(text_scores, key=lambda x: x[1], reverse=True)
+                result.append(query_result)
+                
+    return result
 
 
 def clip_filter(
