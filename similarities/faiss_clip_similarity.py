@@ -407,7 +407,7 @@ class ClipItem(BaseModel):
 
 class SearchItem(BaseModel):
     text: Optional[str] = Field(None, max_length=512)
-    image: Optional[str] = None
+    images: Optional[List[str]] = None
     emb: Optional[List[float]] = None
 
 
@@ -510,8 +510,8 @@ def clip_server(
             if item.text is not None and len(item.text) > 0:
                 q = [item.text]
                 logger.debug(f"query: text {item.text}")
-            elif item.image is not None and len(item.image) > 0:
-                q = [preprocess_image(item.image)]
+            elif item.images is not None and len(item.images) > 0:
+                q = [preprocess_image(img) for img in item.images]
                 logger.debug(f"query: image {item.image}")
             elif item.emb is not None:
                 q = item.emb
@@ -523,11 +523,17 @@ def clip_server(
             else:
                 raise ValueError("item should have text or image or emb")
             results = batch_search_index(q, model, faiss_index, df, num_results, threshold, debug=debug)
+            response = []
+            for image, sorted_text_scores in zip(item.images, results):
+                all_data.append({
+                    'image': image,
+                    'results': [{'item': i, 'similarity': j, 'id': k} for i, j, k in sorted_text_scores]
+                })
             # batch search result, input is one, need return the first
-            sorted_text_scores = results[0]
-            result_dict = {'result': sorted_text_scores}
+            #sorted_text_scores = results[0]
+            #result_dict = {'result': sorted_text_scores}
             logger.debug(f"Successfully search done, res size: {len(sorted_text_scores)}")
-            return result_dict
+            return response
         except Exception as e:
             logger.error(f"search error: {e}")
             return {'status': False, 'msg': e}, 400
