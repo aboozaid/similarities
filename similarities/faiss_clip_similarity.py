@@ -512,7 +512,7 @@ def clip_server(
                 logger.debug(f"query: text {item.text}")
             elif item.images is not None and len(item.images) > 0:
                 q = [preprocess_image(img) for img in item.images]
-                logger.debug(f"query: image {item.image}")
+                logger.debug(f"Query: images size {len(item.images)}")
             elif item.emb is not None:
                 q = item.emb
                 logger.debug(f"query: emb size {len(item.emb)}")
