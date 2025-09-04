@@ -525,14 +525,14 @@ def clip_server(
             results = batch_search_index(q, model, faiss_index, df, num_results, threshold, debug=debug)
             response = []
             for image, sorted_text_scores in zip(item.images, results):
-                all_data.append({
+                response.append({
                     'image': image,
                     'results': [{'item': i, 'similarity': j, 'id': k} for i, j, k in sorted_text_scores]
                 })
             # batch search result, input is one, need return the first
             #sorted_text_scores = results[0]
             #result_dict = {'result': sorted_text_scores}
-            logger.debug(f"Successfully search done, res size: {len(sorted_text_scores)}")
+            #logger.debug(f"Successfully search done, res size: {len(sorted_text_scores)}")
             return response
         except Exception as e:
             logger.error(f"search error: {e}")
